@@ -42,26 +42,31 @@ class RateLimiter:
         return time.time() - self.start
 
 
-def call_endpoint(url, headers={'Accept': 'application/vnd.github.v3+json'}):
+def call_endpoint(url, headers={'Accept': 'application/vnd.github.v3+json'}, params={}):
     try:
-        response = requests.get(url, auth = ('username', config.authorization_code), headers=headers, timeout=5)
+        response = requests.get(url, params=params, auth = ('username', config.authorization_code), headers=headers, timeout=5)
     except ConnectTimeout:
         return None
     return response.json()
 
 
-def get_issues_in_repo(owner, repo):
+def get_issues_in_repo(owner, repo, labels=None):
     # add filter by labels
     url = BASE_URL + f'repos/{owner}/{repo}/issues'
-    response_json = call_endpoint(url)
-    print(response_json)
+    if labels is None:
+        params = {}
+    elif isinstance(labels, list):
+        params = {'labels':','.join(labels)}
+    elif isinstance(labels, str):
+        params = {'labels': labels}
+    response_json = call_endpoint(url, params=params)
     issues = []
     for issue in response_json:
         issues.append({
             'state': issue['state'],
             'issue': issue['number'],
-            'labels': [x['name'] for x in issues['labels']],
-    replaced by 'body_text', maybe lists - 'body_code', 'code_language'
+            'labels': [x['name'] for x in issue['labels']],
+    # replaced by 'body_text', maybe lists - 'body_code', 'code_language'
             'body': issue['body'],
             'title': issue['title']
         })
@@ -89,12 +94,20 @@ def get_mentioned_pr(owner, repo, issue):
     url = BASE_URL + f'repos/{owner}/{repo}/issues/{issue}/timeline'
     return call_endpoint(url)
 
+def test_on_test_issues_repo():
+    list_of_keys = ['state', 'issue', 'labels', 'body', 'title']
+    issues = get_issues_in_repo('gan3sh500', 'test-issues-repo', labels=['good first issue'])
+    if not isinstance(issues, list):
+        raise ValueError('The response is not a list')
+    for index, issue in enumerate(issues):
+        if not isinstance(issue, dict):
+            raise ValueError(f'The issue {index} is not a dict')
+        for key in list_of_keys:
+            if key not in issue:
+                raise ValueError(f'The key {key} is missing in issue {index}')
+    print(issues)
+    
+        
 
 if __name__ == '__main__':
-    for i in range(100):
-        print(i)
-        response = get_issues_in_repo('replicate', 'replicate')
-
-    # print(get_modified_files('replicate', 'replicate', '470'))
-    # print(get_mentioned_pr('PytorchLightning', 'pytorch-lightning', '5577'))
-
+    test_on_test_issues_repo()
