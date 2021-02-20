@@ -1,7 +1,7 @@
 import os
 import requests
 from requests.exceptions import ConnectTimeout
-
+import config
 BASE_URL = 'https://api.github.com/'
 
 class RateLimiter:
@@ -17,6 +17,7 @@ class RateLimiter:
         self.time_limit = time_limit
         self.calls = 0
         self.start = None
+  
 
     def reset(self):
         self.calls = 0
@@ -43,7 +44,7 @@ class RateLimiter:
 
 def call_endpoint(url, headers={'Accept': 'application/vnd.github.v3+json'}):
     try:
-        response = requests.get(url, headers=headers, timeout=5)
+        response = requests.get(url, auth = ('username', config.authorization_code), headers=headers, timeout=5)
     except ConnectTimeout:
         return None
     return response.json()
@@ -52,16 +53,17 @@ def call_endpoint(url, headers={'Accept': 'application/vnd.github.v3+json'}):
 def get_issues_in_repo(owner, repo):
     url = BASE_URL + f'repos/{owner}/{repo}/issues'
     response_json = call_endpoint(url)
-    issues = []
-    for issue in response_json:
-        issues.append({
-            'state': issue['state'],
-            'issue': issue['number'],
-            'labels': [x['name'] for x in issues['labels']],
-            'body': issue['body'],
-            'title': issue['title']
-        })
-    return issues
+    print(response_json)
+    # issues = []
+    # for issue in response_json:
+    #     issues.append({
+    #         'state': issue['state'],
+    #         'issue': issue['number'],
+    #         'labels': [x['name'] for x in issues['labels']],
+    #         'body': issue['body'],
+    #         'title': issue['title']
+    #     })
+    # return issues
 
 
 def get_modified_files(owner, repo, pr):
@@ -70,7 +72,7 @@ def get_modified_files(owner, repo, pr):
     changed_files = []
     for changed_file in response_json:
         changed_files.append({
-            'status': changed_file['status']
+            'status': changed_file['status'],
             'filename': changed_file['filename']
         })
     return changed_files
@@ -82,7 +84,10 @@ def get_mentioned_pr(owner, repo, issue):
 
 
 if __name__ == '__main__':
-    print(get_issues_in_repo('replicate', 'replicate'))
+    for i in range(100):
+        print(i)
+        response = get_issues_in_repo('replicate', 'replicate')
+
     # print(get_modified_files('replicate', 'replicate', '470'))
     # print(get_mentioned_pr('PytorchLightning', 'pytorch-lightning', '5577'))
 
