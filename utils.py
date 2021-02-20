@@ -2,6 +2,7 @@ import os
 import requests
 from requests.exceptions import ConnectTimeout
 import config
+import re
 BASE_URL = 'https://api.github.com/'
 
 class RateLimiter:
@@ -62,21 +63,26 @@ def get_issues_in_repo(owner, repo, labels=None):
     response_json = call_endpoint(url, params=params)
     issues = []
     for issue in response_json:
+        code, text = seperate_body_to_code(issue['body'])
         issues.append({
             'state': issue['state'],
             'issue': issue['number'],
             'labels': [x['name'] for x in issue['labels']],
-    # replaced by 'body_text', maybe lists - 'body_code', 'code_language'
-            'body': issue['body'],
+            'body_text': text,
+            'body_code': code,
             'title': issue['title']
         })
     return issues
 
 
 # fill here.
-def seperate_body_to_code(body):
-    pass
-
+def seperate_body_to_code(body: str):
+    if not isinstance(body, str):
+        raise ValueError('Body of the issue was not text')
+    splits = body.split('```')
+    code = splits[1:-1:2]
+    text = ''.join(splits[0::2])
+    return code, text
 
 def get_modified_files(owner, repo, pr):
     url = BASE_URL + f'repos/{owner}/{repo}/pulls/{pr}/files'
@@ -95,7 +101,7 @@ def get_mentioned_pr(owner, repo, issue):
     return call_endpoint(url)
 
 def test_on_test_issues_repo():
-    list_of_keys = ['state', 'issue', 'labels', 'body', 'title']
+    list_of_keys = ['state', 'issue', 'labels', 'body_text', 'body_code', 'title']
     issues = get_issues_in_repo('gan3sh500', 'test-issues-repo', labels=['good first issue'])
     if not isinstance(issues, list):
         raise ValueError('The response is not a list')
