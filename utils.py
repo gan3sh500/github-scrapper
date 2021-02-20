@@ -51,19 +51,26 @@ def call_endpoint(url, headers={'Accept': 'application/vnd.github.v3+json'}):
 
 
 def get_issues_in_repo(owner, repo):
+    # add filter by labels
     url = BASE_URL + f'repos/{owner}/{repo}/issues'
     response_json = call_endpoint(url)
     print(response_json)
-    # issues = []
-    # for issue in response_json:
-    #     issues.append({
-    #         'state': issue['state'],
-    #         'issue': issue['number'],
-    #         'labels': [x['name'] for x in issues['labels']],
-    #         'body': issue['body'],
-    #         'title': issue['title']
-    #     })
-    # return issues
+    issues = []
+    for issue in response_json:
+        issues.append({
+            'state': issue['state'],
+            'issue': issue['number'],
+            'labels': [x['name'] for x in issues['labels']],
+    replaced by 'body_text', maybe lists - 'body_code', 'code_language'
+            'body': issue['body'],
+            'title': issue['title']
+        })
+    return issues
+
+
+# fill here.
+def seperate_body_to_code(body):
+    pass
 
 
 def get_modified_files(owner, repo, pr):
