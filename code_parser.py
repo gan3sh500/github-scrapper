@@ -21,9 +21,18 @@ def extract_names_from_node(node) -> list:
     if isinstance(node, Assign):
         print(node)
         for target in node.targets:
-            if isinstance(target, AssignAttr):
-                names.append(target.attrname)
-        if isinstance(node.value, Name):
+            names.extend(extract_names_from_node(target))
+        names.extend(extract_names_from_node(node.value))
+    if isinstance(node, AssignAttr):
+        names.append(node.attrname)
+    if isinstance(node, Call):
+        names.extend(extract_names_from_node(node.func))
+        if node.args is not None:
+            for arg in node.args:
+                names.extend(extract_names_from_node(arg))
+        if node.keywords is not None:
+            for kwarg in node.keywords:
+                names.extend(extract_names_from_node(kwarg))
     return names
 
 def recurse_on_tree(root):
