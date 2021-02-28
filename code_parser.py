@@ -1,5 +1,9 @@
 import astroid
-from astroid.nodes import Import, ImportFrom, FunctionDef, ClassDef, Assign, AssignAttr, Call, Name
+from astroid.nodes import (
+    Import, ImportFrom, FunctionDef, ClassDef,
+    Assign, AssignAttr, Call, Name, Expr,
+    Attribute, Arguments, Return, Tuple
+)
 
 def parse_text(text: str):
     #Validation steps
@@ -10,7 +14,19 @@ def parse_text(text: str):
 def extract_names_from_node(node) -> list:
     names = []
     if hasattr(node, 'name'):
-        names.append(node.name)
+        if not node.name == 'tuple':
+            names.append(node.name)
+    if isinstance(node, FunctionDef):
+        names.extend(extract_names_from_node(node.args))
+    if isinstance(node, Arguments):
+        # type annotations also available here
+        for arg in node.args:
+            names.append(arg.name)
+    if isinstance(node, Return):
+        names.extend(extract_names_from_node(node.value))
+    if isinstance(node, Tuple):
+        for attribute in node.elts:
+            names.extend(extract_names_from_node(attribute))
     if isinstance(node, Import):
         for lib, alias in node.names:
             names.extend([lib])
@@ -19,7 +35,6 @@ def extract_names_from_node(node) -> list:
         for func, alias in node.names:
             names.append(func)
     if isinstance(node, Assign):
-        print(node)
         for target in node.targets:
             names.extend(extract_names_from_node(target))
         names.extend(extract_names_from_node(node.value))
@@ -33,6 +48,11 @@ def extract_names_from_node(node) -> list:
         if node.keywords is not None:
             for kwarg in node.keywords:
                 names.extend(extract_names_from_node(kwarg))
+    if isinstance(node, Expr):
+        names.extend(extract_names_from_node(node.value))
+    if isinstance(node, Attribute):
+        names.append(node.attrname)
+        names.extend(extract_names_from_node(node.expr))
     return names
 
 def recurse_on_tree(root):
@@ -51,6 +71,16 @@ def test_recurse_on_tree(filepath='sample_code.py'):
     with open(filepath, 'r') as f:
         text = f.read()
         root = parse_text(text)
+        # for item in dir(root.body[1]):
+        #     thing = getattr(root.body[1], item)
+        #     print('Item : {}'.format(item))
+        #     if callable(thing):
+        #         try:
+        #             print(thing())
+        #         except Exception as e:
+        #             pass
+        #     else:
+        #         print(thing)
         names = recurse_on_tree(root)[1:]
     print(names)
 
