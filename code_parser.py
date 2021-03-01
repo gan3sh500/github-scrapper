@@ -14,7 +14,7 @@ def parse_text(text: str):
 def extract_names_from_node(node) -> list:
     names = []
     if hasattr(node, 'name'):
-        if not node.name == 'tuple':
+        if not node.name == 'tuple' and not node.name == '':
             names.append(node.name)
     if isinstance(node, FunctionDef):
         names.extend(extract_names_from_node(node.args))
@@ -71,16 +71,6 @@ def test_recurse_on_tree(filepath='sample_code.py'):
     with open(filepath, 'r') as f:
         text = f.read()
         root = parse_text(text)
-        # for item in dir(root.body[1]):
-        #     thing = getattr(root.body[1], item)
-        #     print('Item : {}'.format(item))
-        #     if callable(thing):
-        #         try:
-        #             print(thing())
-        #         except Exception as e:
-        #             pass
-        #     else:
-        #         print(thing)
         names = recurse_on_tree(root)[1:]
     print(names)
 
