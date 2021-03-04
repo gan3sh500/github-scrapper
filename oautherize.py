@@ -1,6 +1,5 @@
 import json
 import requests 
-from urllib.parse import unquote
 
 import webbrowser
 from cselector import yes_or_no
