@@ -1,9 +1,25 @@
 import os
+import re
+import json
 import requests
 from requests.exceptions import ConnectTimeout
-import config
-import re
+
+
 BASE_URL = 'https://api.github.com/'
+
+
+def read_json(filename):
+    with open(filename, 'r') as f:
+        return json.load(f)
+
+
+def dump_json(data, filename):
+    with open(filename, 'w') as f:
+        json.dump(data, f, indent=4)
+
+
+config = read_json('config.json')
+
 
 class RateLimiter:
     def __init__(self, max_calls: int, time_limit: float):
@@ -45,14 +61,13 @@ class RateLimiter:
 
 def call_endpoint(url, headers={'Accept': 'application/vnd.github.v3+json'}, params={}):
     try:
-        response = requests.get(url, params=params, auth = ('username', config.authorization_code), headers=headers, timeout=5)
+        response = requests.get(url, params=params, auth = ('username', config["authorization_code"]), headers=headers, timeout=5)
     except ConnectTimeout:
         return None
     return response.json()
 
 
-def get_issues_in_repo(owner, repo, labels=None):
-    # add filter by labels
+def get_issues_in_repo(owner, repo, labels=None, page=0):
     url = BASE_URL + f'repos/{owner}/{repo}/issues'
     if labels is None:
         params = {}
@@ -60,6 +75,10 @@ def get_issues_in_repo(owner, repo, labels=None):
         params = {'labels':','.join(labels)}
     elif isinstance(labels, str):
         params = {'labels': labels}
+    params.update({
+        'page': page,
+        'per_page': 100,
+    })
     response_json = call_endpoint(url, params=params)
     issues = []
     for issue in response_json:
@@ -75,13 +94,13 @@ def get_issues_in_repo(owner, repo, labels=None):
     return issues
 
 
-# fill here.
 def extract_code_from_body(body: str):
     if not isinstance(body, str):
         raise ValueError('Body of the issue was not text')
     pattern = re.compile('\r\n[`]+([\w]*)\r\n([\w\s=().\']+)[`]+')
     code = pattern.findall(body)
     return code
+
 
 def get_modified_files(owner, repo, pr):
     url = BASE_URL + f'repos/{owner}/{repo}/pulls/{pr}/files'
@@ -99,9 +118,10 @@ def get_mentioned_pr(owner, repo, issue):
     url = BASE_URL + f'repos/{owner}/{repo}/issues/{issue}/timeline'
     return call_endpoint(url)
 
+
 def test_on_test_issues_repo():
     list_of_keys = ['state', 'issue', 'labels', 'body', 'body_code', 'title']
-    issues = get_issues_in_repo('gan3sh500', 'test-issues-repo', labels=['bug'])
+    issues = get_all_issues_in_repo('gan3sh500', 'test-issues-repo', labels=['bug'])
     if not isinstance(issues, list):
         raise ValueError('The response is not a list')
     for index, issue in enumerate(issues):
@@ -112,7 +132,18 @@ def test_on_test_issues_repo():
                 raise ValueError(f'The key {key} is missing in issue {index}')
     print(issues)
     
-        
+def get_all_issues_in_repo(owner, repo, labels=None):
+    all_issues = []
+    i = 1
+    while(True):
+        issues = get_issues_in_repo(owner, repo, labels=labels, page=i)
+        if len(issues) > 0:
+            all_issues.extend(issues)
+            i += 1
+        else:
+            break
+    return all_issues
+
 
 if __name__ == '__main__':
     test_on_test_issues_repo()
