@@ -1,6 +1,9 @@
 import os
 import re
 import json
+import uuid
+
+import pickle
 import requests
 from requests.exceptions import ConnectTimeout
 
@@ -16,6 +19,19 @@ def read_json(filename):
 def dump_json(data, filename):
     with open(filename, 'w') as f:
         json.dump(data, f, indent=4)
+
+def get_uuid(seed_string: str) -> str:
+    return uuid.uuid5(uuid.NAMESPACE_DNS, seed_string)
+
+
+def read_pickle(filename):
+    with open(filename, 'rb') as f:
+        return pickle.load(f)
+
+
+def dump_pickle(data, filename):
+    with open(filename, 'wb') as f:
+        pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 config = read_json('config.json')
