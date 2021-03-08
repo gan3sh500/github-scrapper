@@ -83,7 +83,7 @@ def call_endpoint(url, headers={'Accept': 'application/vnd.github.v3+json'}, par
     return response.json()
 
 
-def get_issues_in_repo(owner, repo, labels=None, page=0):
+def get_issues_in_repo(owner, repo, labels=None, page=1):
     url = BASE_URL + f'repos/{owner}/{repo}/issues'
     if labels is None:
         params = {}
@@ -100,6 +100,7 @@ def get_issues_in_repo(owner, repo, labels=None, page=0):
     for issue in response_json:
         code = extract_code_from_body(issue['body'])
         issues.append({
+            'updated_at': issue['updated_at'],
             'state': issue['state'],
             'issue': issue['number'],
             'labels': [x['name'] for x in issue['labels']],
@@ -132,11 +133,41 @@ def get_modified_files(owner, repo, pr):
 
 def get_mentioned_pr(owner, repo, issue):
     url = BASE_URL + f'repos/{owner}/{repo}/issues/{issue}/timeline'
-    return call_endpoint(url)
+    response_json = call_endpoint(url)
+    print(response_json)
 
+def get_commits_in_repo(owner, repo, page=1):
+    url = BASE_URL + f'repos/{owner}/{repo}/commits'
+    params = {
+        'page': page,
+        'per_page': 100,
+    }
+    response_json = call_endpoint(url, params=params)
+    commits = []
+    for index, commit in enumerate(response_json):
+        if commit['commit']['author']['date'] == commit['commit']['committer']['date']:
+            commits.append({
+                'id':commit['sha'],
+                'time': commit['commit']['author']['date'],
+                })
+        else:
+            raise ValueError(f"Commit with id {commit['sha']} and index {index} has conflicting timestamps")
+    return commits
+
+def get_all_commits_in_repo(owner, repo, labels=None):
+    all_commits = []
+    i = 1
+    while(True):
+        commits = get_commits_in_repo(owner, repo, page=i)
+        if len(commits) > 0:
+            all_commits.extend(commits)
+            i += 1
+        else:
+            break
+    return all_commits
 
 def test_on_test_issues_repo():
-    list_of_keys = ['state', 'issue', 'labels', 'body', 'body_code', 'title']
+    list_of_keys = ['updated_at', 'state', 'issue', 'labels', 'body', 'body_code', 'title']
     issues = get_all_issues_in_repo('gan3sh500', 'test-issues-repo', labels=['bug'])
     if not isinstance(issues, list):
         raise ValueError('The response is not a list')
@@ -147,6 +178,19 @@ def test_on_test_issues_repo():
             if key not in issue:
                 raise ValueError(f'The key {key} is missing in issue {index}')
     print(issues)
+
+def test_on_test_issues_repo_commits():
+    list_of_keys = ['id', 'time',]
+    commits = get_all_commits_in_repo('gan3sh500', 'test-issues-repo')
+    if not isinstance(commits, list):
+        raise ValueError('The response is not a list')
+    for index, commit in enumerate(commits):
+        if not isinstance(commit, dict):
+            raise ValueError(f'The issue {index} is not a dict')
+        for key in list_of_keys:
+            if key not in commit:
+                raise ValueError(f'The key {key} is missing in issue {index}')
+    print(commits)
     
 def get_all_issues_in_repo(owner, repo, labels=None):
     all_issues = []
@@ -162,4 +206,5 @@ def get_all_issues_in_repo(owner, repo, labels=None):
 
 
 if __name__ == '__main__':
-    test_on_test_issues_repo()
+    # test_on_test_issues_repo()
+    test_on_test_issues_repo_commits()
