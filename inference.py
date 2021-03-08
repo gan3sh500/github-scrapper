@@ -1,29 +1,31 @@
 from pathlib import Path
 from typing import Dict, List
 
-import cPickle as pkl
+import pickle as pkl
+import subprocess
 
 from code_parser import parse_text, recurse_on_tree
 from utils import get_uuid, read_pickle, dump_pickle
 
 
 class InferenceEngine(object):
-    def __init__(self, repo_dir: str, commit_ids: List[str], pickle_dir='~/save_pkl/'):
+    def __init__(self, repo_dir: str, commit_ids: List[str], pickle_dir='~/save_pkl/', refresh=False):
         self.repo_dir = Path(repo_dir)
         self.commit_ids = commit_ids
         self.pickle_dir = Path(pickle_dir)
+        self.refresh = refresh
         self.make_namespace()
 
     @property
     def pickle_filename(self):
-        return self.pickle_dir / (f'{get_uuid(self.repo_dir)}.pkl'
+        return self.pickle_dir / (f'{get_uuid(str(self.repo_dir))}.pkl')
 
     def save_namespace(self):
         self.pickle_dir.mkdir(exist_ok=True, parents=True)
         dump_pickle(self.all_namespaces, self.pickle_filename)
     
     def make_namespace(self):
-        if self.pickle_filename.is_file():
+        if self.pickle_filename.is_file() and not self.refresh:
             self.all_namespaces = read_pickle(self.pickle_filename)
         else:
             self.all_namespaces = {}
@@ -35,7 +37,7 @@ class InferenceEngine(object):
         self.checkout(commit_id)
         filelist = self.repo_dir.glob('**/*.py')
         namespace = {}
-        for filename in self.filelist:
+        for filename in filelist:
             with open(filename, 'r') as f:
                 text = f.read()
                 tree = parse_text(text)
@@ -44,29 +46,29 @@ class InferenceEngine(object):
         return namespace
     
     def checkout(self, commit_id: str):
-        subprocess.run(f'git checkout {commit_id}'.split(' '), )
+        subprocess.run(f'git checkout {commit_id}'.split(' '), cwd=self.repo_dir)
     
     def infer(self, body_code:list, body_text:str, commit_id: str = None) -> Dict:
         target_namespace = []
-        if commit_id is not None:
-            self.checkout(commit_id)
         for language, code in body_code:
             tree = parse_text(code)
             names = recurse_on_tree(tree)
             target_namespace.extend(names)
         target_namespace = set(target_namespace)
         inferred_files = {}
-        for filename, filenamespace in self.namespace.items():
+        for filename, filenamespace in self.all_namespaces[commit_id].items():
             common_names = filenamespace.intersection(target_namespace)
             if len(common_names) > 0:
                 inferred_files[filename] = common_names
         return inferred_files
 
 def test_engine():
-    repo_dir = '/mnt/d/Personal/code/test-issues-repo'
-    engine = InferenceEngine(repo_dir=repo_dir)
-    print(engine.namespace)
+    repo_dir = r'C:\Users\Mazhar\Personal\code\test-issues-repo'
+    commit_ids = ['69e519f4baaa286dcd144b429367662c6067b056', '7748a5c447b8fbb029f21320351d9773898371ff']
+    engine = InferenceEngine(repo_dir=repo_dir, commit_ids=commit_ids, refresh=True)
+    # print(engine.all_namespaces)
     json = { 
+            'commit_id':'69e519f4baaa286dcd144b429367662c6067b056',
             'body': "What if the issue has multiple code blocks? \
                     Without the specification of language used? and comments inside the code? \
                     Like this?\r\n`\r\nimport SampleClass\r\nobj = SampleClass()\r\n`\r\n \
@@ -81,7 +83,7 @@ def test_engine():
                     ('', "import SampleClass\r\n'''This could be a comment'''\r\nobj3 = SampleClass()\r\n")
                 ],
             }
-    result = engine.infer(json['body_code'], json['body'])
+    result = engine.infer(json['body_code'], json['body'], json['commit_id'])
     print(result)
 
 if __name__ == '__main__':
