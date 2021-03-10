@@ -4,14 +4,18 @@ import pathlib
 import argparse
 import datetime
 
-from utils import dump_json, get_all_issues_in_repo
+from utils import dump_json, get_all_issues_in_repo, get_all_commits_in_repo
 
 
 def make_dataset(owner, repo, dataset_dir):
-    issues = get_all_issues_in_repo(owner, repo) 
+    issues = get_all_issues_in_repo(owner, repo)
+    commits = get_all_commits_in_repo(owner, repo)
+    data = {
+        'issues': issues,
+        'commits': commits,
+    }
     dump_path = os.path.join(dataset_dir, f'{owner}_{repo}.json')
-    import pdb; pdb.set_trace()
-    dump_json(issues, dump_path)
+    dump_json(data, dump_path)
 
 
 def main():
