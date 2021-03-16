@@ -4,15 +4,7 @@ import requests
 import webbrowser
 from cselector import yes_or_no
 
-
-def read_json(filename):
-    with open(filename, 'r') as f:
-        return json.load(f)
-
-
-def dump_json(data, filename):
-    with open(filename, 'w') as f:
-        json.dump(data, f, indent=4)
+from utils import read_json, dump_json
 
 
 def get_device_code(config):
