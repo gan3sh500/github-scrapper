@@ -1,6 +1,6 @@
 from pathlib import Path
 from typing import Dict, List
-
+from astroid.exceptions import AstroidSyntaxError
 import pandas as pd
 import pickle as pkl
 import subprocess
@@ -10,8 +10,8 @@ from utils import get_uuid, read_pickle, dump_pickle
 
 
 def match_issue_to_commit(issue, commits):
-    matched_df = pd.merge_asof(commits, issue, left_on='time',
-                                right_on='updated_at', direction='backward')
+    matched_df = pd.merge_asof(issue, commits, right_on='time',
+                                left_on='updated_at', direction='backward')
     return matched_df
 
 class InferenceEngine(object):
@@ -46,8 +46,11 @@ class InferenceEngine(object):
         for filename in filelist:
             with open(filename, 'r') as f:
                 text = f.read()
-                tree = parse_text(text)
-                names = recurse_on_tree(tree)
+                try:
+                    tree = parse_text(text)
+                    names = recurse_on_tree(tree)
+                except AstroidSyntaxError:
+                    names = []              
                 namespace[filename] = set(names)
         return namespace
 
@@ -57,8 +60,11 @@ class InferenceEngine(object):
     def infer(self, body_code:list, body_text:str, commit_id: str = None) -> Dict:
         target_namespace = []
         for language, code in body_code:
-            tree = parse_text(code)
-            names = recurse_on_tree(tree)
+            try:
+                tree = parse_text(code)
+                names = recurse_on_tree(tree)
+            except AstroidSyntaxError:
+                names = []
             target_namespace.extend(names)
         target_namespace = set(target_namespace)
         inferred_files = {}
@@ -69,7 +75,7 @@ class InferenceEngine(object):
         return inferred_files
 
 def test_engine():
-    repo_dir = r'C:\Users\Mazhar\Personal\code\test-issues-repo'
+    repo_dir = r'/mnt/d/Personal/code/test-issues-repo'
     commit_ids = ['69e519f4baaa286dcd144b429367662c6067b056', '7748a5c447b8fbb029f21320351d9773898371ff']
     engine = InferenceEngine(repo_dir=repo_dir, commit_ids=commit_ids, refresh=True)
     # print(engine.all_namespaces)
@@ -86,7 +92,18 @@ def test_engine():
                     ('', 'import SampleClass\r\nobj = SampleClass()\r\n'),
                     ('', 'import SampleClass\r\nobj1 = SampleClass()\r\n'),
                     ('python', 'import SampleClass\r\nobj2 = SampleClass()\r\n'),
-                    ('', "import SampleClass\r\n'''This could be a comment'''\r\nobj3 = SampleClass()\r\n")
+                    ('', "import SampleClass\r\n'''This could be a comment'''\r\nobj3 = SampleClass()\r\n"),
+                    ('', "RuntimeError: Caught RuntimeError in pin memory thread for device 0.\r\n \
+                          Original Traceback (most recent call last):\r\n  \
+                          File \"/lib/python3.7/site-packages/torch/utils/data/_utils/pin_memory.py\", \
+                          line 31, in _pin_memory_loop\r\n   \
+                          data = pin_memory(data)\r\n  \
+                          File \"/lib/python3.7/site-packages/torch/utils/data/_utils/pin_memory.py\", \
+                          line 55, in pin_memory\r\n   \
+                          return [pin_memory(sample) for sample in data]\r\n \
+                          File \"lib/python3.7/site-packages/torch/utils/data/_utils/pin_memory.py\", \
+                          line 55, in <listcomp>\r\n"),
+                    ('', 'argument'),
                 ],
             }
     result = engine.infer(json['body_code'], json['body'], json['commit_id'])
@@ -115,5 +132,5 @@ def test_matching():
     print('Desired : 69696969696')
 
 if __name__ == '__main__':
-    #test_engine()
+    test_engine()
     test_matching()

@@ -122,6 +122,7 @@ def extract_code_from_body(body: str):
     multiline_code = multiline_pattern.findall(body)
     singleline_pattern = re.compile('`([^`\n]+)`')
     singleline_code = singleline_pattern.findall(body)
+    singleline_code = [('', text) for text in singleline_code]
     return multiline_code + singleline_code
 
 
