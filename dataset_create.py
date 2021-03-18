@@ -7,8 +7,8 @@ import datetime
 from utils import dump_json, get_all_issues_in_repo, get_all_commits_in_repo
 
 
-def make_dataset(owner, repo, dataset_dir):
-    issues = get_all_issues_in_repo(owner, repo)
+def make_dataset(owner, repo, dataset_dir, labels):
+    issues = get_all_issues_in_repo(owner, repo, labels=labels)
     commits = get_all_commits_in_repo(owner, repo)
     data = {
         'issues': issues,
@@ -22,6 +22,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--repos_list', required=True, type=str)
     parser.add_argument('--dataset_dir', required=True, type=str)
+    parser.add_argument('--labels', type=str)
     args = parser.parse_args()
 
     csv_path = args.repos_list
@@ -35,7 +36,7 @@ def main():
         csvreader = csv.reader(csvfile, delimiter=',')
         for row in csvreader:
             owner, repo = row
-            make_dataset(owner, repo, timestamped_dataset_dir)
+            make_dataset(owner, repo, timestamped_dataset_dir, args.labels)
 
 if __name__ == '__main__':
     main()

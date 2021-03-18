@@ -2,7 +2,7 @@ import os
 import re
 import json
 import uuid
-
+import pprint
 import pickle
 import requests
 from requests.exceptions import ConnectTimeout
@@ -92,10 +92,14 @@ def get_issues_in_repo(owner, repo, labels=None, page=1):
     elif isinstance(labels, str):
         params = {'labels': labels}
     params.update({
+        'state': 'all',
         'page': page,
         'per_page': 100,
     })
     response_json = call_endpoint(url, params=params)
+    if not isinstance(response_json, list):
+        pprint.pprint(response_json, indent=4)
+        raise ValueError("Response was not a list")
     issues = []
     for issue in response_json:
         code = extract_code_from_body(issue['body'])
@@ -114,9 +118,11 @@ def get_issues_in_repo(owner, repo, labels=None, page=1):
 def extract_code_from_body(body: str):
     if not isinstance(body, str):
         raise ValueError('Body of the issue was not text')
-    pattern = re.compile('\r\n[`]+([\w]*)\r\n([\w\s=().\']+)[`]+')
-    code = pattern.findall(body)
-    return code
+    multiline_pattern = re.compile('\r\n[`]+([\w]*)\r\n([^`]+)[`]+')
+    multiline_code = multiline_pattern.findall(body)
+    singleline_pattern = re.compile('`([^`\n]+)`')
+    singleline_code = singleline_pattern.findall(body)
+    return multiline_code + singleline_code
 
 
 def get_modified_files(owner, repo, pr):
@@ -145,13 +151,10 @@ def get_commits_in_repo(owner, repo, page=1):
     response_json = call_endpoint(url, params=params)
     commits = []
     for index, commit in enumerate(response_json):
-        if commit['commit']['author']['date'] == commit['commit']['committer']['date']:
-            commits.append({
-                'id':commit['sha'],
-                'time': commit['commit']['author']['date'],
-                })
-        else:
-            raise ValueError(f"Commit with id {commit['sha']} and index {index} has conflicting timestamps")
+        commits.append({
+            'id':commit['sha'],
+            'time': commit['commit']['committer']['date'],
+            })
     return commits
 
 def get_all_commits_in_repo(owner, repo, labels=None):
@@ -177,7 +180,7 @@ def test_on_test_issues_repo():
         for key in list_of_keys:
             if key not in issue:
                 raise ValueError(f'The key {key} is missing in issue {index}')
-    print(issues)
+    pprint.pprint(issues, indent=4)
 
 def test_on_test_issues_repo_commits():
     list_of_keys = ['id', 'time',]
@@ -190,7 +193,7 @@ def test_on_test_issues_repo_commits():
         for key in list_of_keys:
             if key not in commit:
                 raise ValueError(f'The key {key} is missing in issue {index}')
-    print(commits)
+    pprint.pprint(commits, indent=4)
     
 def get_all_issues_in_repo(owner, repo, labels=None):
     all_issues = []
@@ -206,5 +209,5 @@ def get_all_issues_in_repo(owner, repo, labels=None):
 
 
 if __name__ == '__main__':
-    # test_on_test_issues_repo()
-    test_on_test_issues_repo_commits()
+    test_on_test_issues_repo()
+    # test_on_test_issues_repo_commits()
