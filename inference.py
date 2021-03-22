@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Dict, List
 from astroid.exceptions import AstroidSyntaxError
 import pandas as pd
+import numpy as np
 import pickle as pkl
 import subprocess
 
@@ -20,7 +21,7 @@ class InferenceEngine(object):
         self.commit_ids = commit_ids
         self.pickle_dir = Path(pickle_dir)
         self.refresh = refresh
-        self.make_namespace()
+        self.build()
 
     @property
     def pickle_filename(self):
@@ -39,7 +40,45 @@ class InferenceEngine(object):
                 self.all_namespaces[commit_id] = self.make_namespace_for_commit(commit_id)
             self.save_namespace()
 
+    def build(self):
+        self.make_namespace()
+        # will work on self.all_namespaces to make the document_matrix
+        # will save the document_matrix, vocab vector and idf vector.
+        # repo_file_vec = document_matrix[i] * idf_vector
+        all_names = set()
+        for commit, namespace in self.all_namespaces.items():
+            commit_names = []
+            for filename, names in namespace.items():
+                commit_names.extend(names)
+            all_names.union(commit_names)
+        self.vocabulary = sorted(set(all_names))
+
+        document_counters = {}
+        self.document_matrices = {}
+        # {'commit_id': {'filename': Counter}}
+        for commit, namespace in self.all_namespaces.items():
+            all_file_counts = {}
+            for filename, names in namespace.items():
+                all_file_counts[filename] = Counter(names)
+            # each document_matrix should be a dictionary with the matrix and the list of filenames
+            document_counters[commit] = all_file_counts
+            self.document_matrices[commit] = self.make_document_matrices(
+                all_file_counts,
+                self.vocabulary
+            )
+    
+    def make_document_matrices(self, all_file_counts, vocabulary):
+        num_files = len(all_file_counts)
+        num_vocabulary = len(vocabulary)
+        document_matrix = np.zeros((num_files, num_vocabulary), dtype='int')
+        file_names = sorted(all_file_counts.keys())
+        for row, fname in enumerate(file_names):
+            for column in range(num_vocabulary):
+                document_matrix[row, column] = all_file_counts[fname][vocabulary[column]]
+        return {'document_matrix': document_matrix, 'file_names': file_names}
+
     def make_namespace_for_commit(self, commit_id: str) -> Dict:
+        # should be computing idf for the commit here.
         self.checkout(commit_id)
         filelist = self.repo_dir.glob('**/*.py')
         namespace = {}
@@ -50,8 +89,9 @@ class InferenceEngine(object):
                     tree = parse_text(text)
                     names = recurse_on_tree(tree)
                 except AstroidSyntaxError:
-                    names = []              
-                namespace[filename] = set(names)
+                    names = []
+                # make frequency vector for file on whole vocab.              
+                namespace[filename] = names
         return namespace
 
     def checkout(self, commit_id: str):
@@ -66,7 +106,8 @@ class InferenceEngine(object):
             except AstroidSyntaxError:
                 names = []
             target_namespace.extend(names)
-        target_namespace = set(target_namespace)
+        # compute frequency vec here instead on the whole vocabulary.
+        target_namespace = target_namespace
         inferred_files = {}
         for filename, filenamespace in self.all_namespaces[commit_id].items():
             common_names = filenamespace.intersection(target_namespace)
