@@ -1,12 +1,11 @@
 from pathlib import Path
 from typing import Dict, List
-from astroid.exceptions import AstroidSyntaxError
 import pandas as pd
 import numpy as np
 import pickle as pkl
 import subprocess
 
-from code_parser import parse_text, recurse_on_tree
+from code_parser import parse_names_from_text
 from utils import get_uuid, read_pickle, dump_pickle
 
 
@@ -14,6 +13,8 @@ def match_issue_to_commit(issue, commits):
     matched_df = pd.merge_asof(issue, commits, right_on='time',
                                 left_on='updated_at', direction='backward')
     return matched_df
+
+
 
 class InferenceEngine(object):
     def __init__(self, repo_dir: str, commit_ids: List[str], pickle_dir='~/save_pkl/', refresh=False):
@@ -42,9 +43,11 @@ class InferenceEngine(object):
 
     def build(self):
         self.make_namespace()
-        # will work on self.all_namespaces to make the document_matrix
-        # will save the document_matrix, vocab vector and idf vector.
-        # repo_file_vec = document_matrix[i] * idf_vector
+        '''
+        will work on self.all_namespaces to make the document_matrix
+        will save the document_matrix, vocab vector and idf vector.
+        repo_file_vec = document_matrix[i] * idf_vector
+        '''
         all_names = set()
         for commit, namespace in self.all_namespaces.items():
             commit_names = []
@@ -85,11 +88,7 @@ class InferenceEngine(object):
         for filename in filelist:
             with open(filename, 'r') as f:
                 text = f.read()
-                try:
-                    tree = parse_text(text)
-                    names = recurse_on_tree(tree)
-                except AstroidSyntaxError:
-                    names = []
+                names = parse_names_from_text(text)
                 # make frequency vector for file on whole vocab.              
                 namespace[filename] = names
         return namespace
@@ -98,13 +97,12 @@ class InferenceEngine(object):
         subprocess.run(f'git checkout {commit_id}'.split(' '), cwd=self.repo_dir)
 
     def infer(self, body_code:list, body_text:str, commit_id: str = None) -> Dict:
+        '''
+
+        '''
         target_namespace = []
         for language, code in body_code:
-            try:
-                tree = parse_text(code)
-                names = recurse_on_tree(tree)
-            except AstroidSyntaxError:
-                names = []
+            names = parse_names_from_text(text)
             target_namespace.extend(names)
         # compute frequency vec here instead on the whole vocabulary.
         target_namespace = target_namespace
