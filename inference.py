@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import pickle as pkl
 import subprocess
+from collections import Counter
 
 from code_parser import parse_names_from_text
 from utils import get_uuid, read_pickle, dump_pickle
@@ -51,34 +52,32 @@ class InferenceEngine(object):
         all_names = set()
         for commit, namespace in self.all_namespaces.items():
             commit_names = []
-            for filename, names in namespace.items():
+            for _, names in namespace.items():
                 commit_names.extend(names)
             all_names.union(commit_names)
         self.vocabulary = sorted(set(all_names))
 
-        document_counters = {}
         self.document_matrices = {}
-        # {'commit_id': {'filename': Counter}}
         for commit, namespace in self.all_namespaces.items():
-            all_file_counts = {}
-            for filename, names in namespace.items():
-                all_file_counts[filename] = Counter(names)
-            # each document_matrix should be a dictionary with the matrix and the list of filenames
-            document_counters[commit] = all_file_counts
-            self.document_matrices[commit] = self.make_document_matrices(
-                all_file_counts,
-                self.vocabulary
-            )
-    
-    def make_document_matrices(self, all_file_counts, vocabulary):
-        num_files = len(all_file_counts)
-        num_vocabulary = len(vocabulary)
-        document_matrix = np.zeros((num_files, num_vocabulary), dtype='int')
-        file_names = sorted(all_file_counts.keys())
-        for row, fname in enumerate(file_names):
-            for column in range(num_vocabulary):
-                document_matrix[row, column] = all_file_counts[fname][vocabulary[column]]
-        return {'document_matrix': document_matrix, 'file_names': file_names}
+            file_names = sorted(namespace.keys())
+            def file_value(x):
+                filename = file_names[x]
+                file_counter = Counter(namespace[filename])
+                return self.make_vector_from_counter(file_counter, self.vocabulary)
+            file_value = np.vectorize(file_value, signature='()->(m)')
+            document_matrix = file_value(np.arange(len(file_names)))
+            self.document_matrices[commit] = {
+                'file_names': file_names,
+                'document_matrix': document_matrix
+            }
+
+    def make_vector_from_counter(self, counter, vocabulary):
+        def index_value(x):
+            return counter[vocabulary[x]]
+
+        index_value = np.vectorize(index_value)
+        vec = index_value(np.arange(len(vocabulary)))
+        return vec
 
     def make_namespace_for_commit(self, commit_id: str) -> Dict:
         # should be computing idf for the commit here.
@@ -105,7 +104,10 @@ class InferenceEngine(object):
             names = parse_names_from_text(text)
             target_namespace.extend(names)
         # compute frequency vec here instead on the whole vocabulary.
-        target_namespace = target_namespace
+        target_namespace = Counter(target_namespace)
+        target_vector = self.make_vector_from_counter(target_namespace, self.vocabulary)
+        
+        # write the actual tf-idf logic
         inferred_files = {}
         for filename, filenamespace in self.all_namespaces[commit_id].items():
             common_names = filenamespace.intersection(target_namespace)
