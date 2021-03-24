@@ -8,9 +8,11 @@ if __name__ == '__main__':
     engine = InferenceEngine(repo_dir="/mnt/d/Personal/data/github-scrapper/repos/lightning-bolts",
                              commit_ids=commit_ids,
                              pickle_dir='./saved_models/',
-                             refresh=False
+                             refresh=True
     )
     for issue in dataset.get_issues_iter():
         data = match_issue_to_commit(issue, dataset.get_commits)
         result = engine.infer(data.body_code[0], data.body[0], str(data.id[0]))
+        pprint.pprint(data.body[0])
         pprint.pprint(result)
+        # import pdb; pdb.set_trace()

@@ -5,6 +5,7 @@ import numpy as np
 import pickle as pkl
 import subprocess
 from collections import Counter
+from sklearn.feature_extraction.text import TfidfTransformer
 
 from code_parser import parse_names_from_text
 from utils import get_uuid, read_pickle, dump_pickle
@@ -15,6 +16,11 @@ def match_issue_to_commit(issue, commits):
                                 left_on='updated_at', direction='backward')
     return matched_df
 
+def softmax(x):
+    x = x - x.max()
+    ex = np.exp(x)
+    return ex / ex.sum(axis=-1, keepdims=True)
+
 
 
 class InferenceEngine(object):
@@ -24,6 +30,8 @@ class InferenceEngine(object):
         self.pickle_dir = Path(pickle_dir)
         self.refresh = refresh
         self.build()
+        self.document_threshold = 0.01
+        self.vocab_threshold = 0.05
 
     @property
     def pickle_filename(self):
@@ -54,28 +62,36 @@ class InferenceEngine(object):
             commit_names = []
             for _, names in namespace.items():
                 commit_names.extend(names)
-            all_names.union(commit_names)
+            # import pdb; pdb.set_trace()
+            all_names = all_names.union(commit_names)
+        # import pdb; pdb.set_trace()
         self.vocabulary = sorted(set(all_names))
 
         self.document_matrices = {}
+        self.tfidfs = {}
         for commit, namespace in self.all_namespaces.items():
             file_names = sorted(namespace.keys())
             def file_value(x):
                 filename = file_names[x]
                 file_counter = Counter(namespace[filename])
+                # import pdb; pdb.set_trace()
                 return self.make_vector_from_counter(file_counter, self.vocabulary)
             file_value = np.vectorize(file_value, signature='()->(m)')
             document_matrix = file_value(np.arange(len(file_names)))
+            tfidf = TfidfTransformer()
+            document_matrix = tfidf.fit_transform(document_matrix).toarray()
             self.document_matrices[commit] = {
                 'file_names': file_names,
                 'document_matrix': document_matrix
             }
+            self.tfidfs[commit] = tfidf
 
     def make_vector_from_counter(self, counter, vocabulary):
         def index_value(x):
             return counter[vocabulary[x]]
-
+         
         index_value = np.vectorize(index_value)
+        # import pdb; pdb.set_trace()
         vec = index_value(np.arange(len(vocabulary)))
         return vec
 
@@ -87,8 +103,7 @@ class InferenceEngine(object):
         for filename in filelist:
             with open(filename, 'r') as f:
                 text = f.read()
-                names = parse_names_from_text(text)
-                # make frequency vector for file on whole vocab.              
+                names = parse_names_from_text(text)              
                 namespace[filename] = names
         return namespace
 
@@ -97,23 +112,42 @@ class InferenceEngine(object):
 
     def infer(self, body_code:list, body_text:str, commit_id: str = None) -> Dict:
         '''
-
+        Get target_vector for the issue code
+        Calculate dot product with document matrix
+        Calculate softmax to find probability distribution over documents
+        Select files using a probability threshold(hyperparameter)
+        For selected files, select top scoring names
+        Return filename and relevant names as dict
         '''
         target_namespace = []
         for language, code in body_code:
-            names = parse_names_from_text(text)
+            names = parse_names_from_text(code)
             target_namespace.extend(names)
-        # compute frequency vec here instead on the whole vocabulary.
+        
         target_namespace = Counter(target_namespace)
         target_vector = self.make_vector_from_counter(target_namespace, self.vocabulary)
         
         # write the actual tf-idf logic
-        inferred_files = {}
-        for filename, filenamespace in self.all_namespaces[commit_id].items():
-            common_names = filenamespace.intersection(target_namespace)
-            if len(common_names) > 0:
-                inferred_files[filename] = common_names
-        return inferred_files
+        target_vector = self.tfidfs[commit_id].transform(target_vector[None, :]).toarray()
+        # import pdb; pdb.set_trace()
+        vocab_scores = np.multiply(self.document_matrices[commit_id]['document_matrix'], target_vector)
+        document_scores = softmax(vocab_scores.sum(axis=1) * vocab_scores.shape[0])
+        mask = (document_scores>=self.document_threshold).astype(document_scores.dtype)
+        indices = np.argsort(-document_scores, axis=0)
+        result_indices = indices[np.where(document_scores[indices]>self.document_threshold)]
+        result = {}
+        for idx in result_indices:
+            filename = self.document_matrices[commit_id]['file_names'][idx]
+            relevant_names = np.array(self.vocabulary)[np.where(vocab_scores[idx]>self.vocab_threshold)]
+            # import pdb; pdb.set_trace()
+            result[filename] = relevant_names.tolist()
+        return result
+        # inferred_files = {}
+        # for filename, filenamespace in self.all_namespaces[commit_id].items():
+        #     common_names = filenamespace.intersection(target_namespace)
+        #     if len(common_names) > 0:
+        #         inferred_files[filename] = common_names
+        # return inferred_files
 
 def test_engine():
     repo_dir = r'/mnt/d/Personal/code/test-issues-repo'
@@ -171,6 +205,7 @@ def test_matching():
     matched = match_issue_to_commit(issues, commits)
     print(f'Got : {matched.loc[[0]].id}')
     print('Desired : 69696969696')
+
 
 if __name__ == '__main__':
     test_engine()
