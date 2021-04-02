@@ -3,16 +3,18 @@ import csv
 import pathlib
 import argparse
 import datetime
-
-from utils import dump_json, get_all_issues_in_repo, get_all_commits_in_repo
+from tqdm import tqdm
+from utils import dump_json, get_all_issues_in_repo, get_all_commits_in_repo, get_all_modified_files
 
 
 def make_dataset(owner, repo, dataset_dir, labels):
     issues = get_all_issues_in_repo(owner, repo, labels=labels)
     commits = get_all_commits_in_repo(owner, repo)
+    files_modified = get_all_modified_files(owner, repo, issues)
     data = {
         'issues': issues,
         'commits': commits,
+        'file_modified': files_modified,
     }
     dump_path = os.path.join(dataset_dir, f'{owner}_{repo}.json')
     dump_json(data, dump_path)
@@ -34,7 +36,7 @@ def main():
     timestamped_dataset_dir.mkdir(parents=True, exist_ok=True)
     with open(csv_path) as csvfile:
         csvreader = csv.reader(csvfile, delimiter=',')
-        for row in csvreader:
+        for row in tqdm(csvreader):
             owner, repo = row
             make_dataset(owner, repo, timestamped_dataset_dir, args.labels)
 

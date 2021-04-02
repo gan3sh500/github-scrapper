@@ -30,7 +30,7 @@ class InferenceEngine(object):
         self.pickle_dir = Path(pickle_dir)
         self.refresh = refresh
         self.build()
-        self.document_threshold = 0.01
+        self.document_threshold = 0.1
         self.vocab_threshold = 0.05
 
     @property
