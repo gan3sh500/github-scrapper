@@ -27,5 +27,3 @@ class Dataset:
 
     def get_relevant_files_for_issue(self, issue_id):
         return [item['filename'] for item in self.files_modified[str(issue_id)]]
-         
-
