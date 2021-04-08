@@ -158,7 +158,7 @@ def get_mentioned_pr(owner, repo, issue, page=1):
         'page': page,
         'per_page': 100,
     }
-    response_json = call_endpoint(url, headers = headers)
+    response_json = call_endpoint(url, params=params, headers = headers)
     # pprint.pprint(response_json)
     possible_prs = []
     if isinstance(response_json, list):
@@ -265,11 +265,11 @@ def test_on_test_issues_repo_commits():
 
 
 def test_issue_events_on_pytorchlightning_repo():
-    owner = 'PyTorchLightning'
+    owner = 'PytorchLightning'
     repo = 'pytorch-lightning'
     issue_id = 5649
-    # possible_prs = get_all_mentioned_prs(owner, repo, issue_id)
-    possible_prs = get_mentioned_pr(owner, repo, issue_id, page=100)
+    possible_prs = get_all_mentioned_prs(owner, repo, issue_id)
+    # possible_prs = get_mentioned_pr(owner, repo, issue_id, page=100)
     files = {}
     for pr in possible_prs:
         files[pr] = get_modified_files(owner, repo, pr)
