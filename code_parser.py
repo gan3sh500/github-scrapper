@@ -4,7 +4,7 @@ from astroid.nodes import (
     Assign, AssignAttr, Call, Name, Expr,
     Attribute, Arguments, Return, Tuple
 )
-from astroid.exceptions import AstroidSyntaxError
+from astroid.exceptions import AstroidSyntaxError, InconsistentMroError
 
 
 def parse_text(text: str):
@@ -80,9 +80,9 @@ def parse_names_from_text(text):
     try:
         tree = parse_text(text)
         names = recurse_on_tree(tree)
-    except AstroidSyntaxError:
+    except (AstroidSyntaxError, InconsistentMroError) as e:
         names = []
-    return names    
+    return names
 
 if __name__ == '__main__':
     test_recurse_on_tree()
