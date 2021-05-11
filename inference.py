@@ -8,7 +8,7 @@ from collections import Counter
 from sklearn.feature_extraction.text import TfidfTransformer
 
 from code_parser import parse_names_from_text
-from utils import get_uuid, read_pickle, dump_pickle
+from utils import get_uuid, read_pickle, dump_pickle, log_wrapper, get_text_from_file
 
 
 def match_issue_to_commit(issue, commits):
@@ -94,15 +94,15 @@ class InferenceEngine(object):
         # import pdb; pdb.set_trace()
         vec = index_value(np.arange(len(vocabulary)))
         return vec
-
+    
+    @log_wrapper
     def make_namespace_for_commit(self, commit_id: str) -> Dict:
         # should be computing idf for the commit here.
         self.checkout(commit_id)
         filelist = self.repo_dir.glob('**/*.py')
         namespace = {}
         for filename in filelist:
-            with open(filename, 'r') as f:
-                text = f.read()
+                text = get_text_from_file(filename)
                 names = parse_names_from_text(text)              
                 namespace[filename] = names
         return namespace

@@ -12,6 +12,7 @@ from requests.exceptions import ConnectTimeout
 BASE_URL = 'https://api.github.com/'
 
 
+
 def read_json(filename):
     with open(filename, 'r') as f:
         return json.load(f)
@@ -81,6 +82,16 @@ def log_wrapper(func):
         logger.debug(f'Function {func.__name__} was called with args {args} and {kwargs}')
         return func(*args, **kwargs)
     return new_func
+
+@log_wrapper
+def get_text_from_file(filename):
+    with open(filename, 'r', encoding='utf-8') as f:
+        try:
+            text = f.read()
+        except Exception as e:
+            logger.debug(f'Filename {filename} threw exception {e}')
+            raise
+    return text
 
 @log_wrapper
 def call_endpoint(url, headers={'Accept': 'application/vnd.github.v3+json'}, params={}):

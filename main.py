@@ -6,7 +6,9 @@ from evaluator import precision_calc, recall_calc
 import pdb
 import subprocess
 import csv
+import argparse
 from utils import dump_json
+
 
 
 def evaluate_repo(repo_json, repo_dir):
@@ -42,14 +44,15 @@ def clone_repo(owner, repo, path):
     subprocess.run(f'git clone https://github.com/{owner}/{repo}.git'.split(' '), cwd=path)
 
 
-def main(repo_csv, jsons_path, repos_path, save_path):
-    jsons_path = Path(jsons_path)
+def main(repo_csv, jsons_dir, repos_path, save_dir):
+    jsons_dir = Path(jsons_dir)
     repos_path = Path(repos_path)
+    save_dir = Path(save_dir)
     results = {}
     with open(repo_csv) as f:
         csvreader = csv.reader(f)
         for owner, repo in csvreader:
-            json_file = jsons_path / f'{owner}_{repo}.json'
+            json_file = jsons_dir / f'{owner}_{repo}.json'
             output_repo_path = repos_path / f'{repo}/'
             if not output_repo_path.exists():
                 clone_repo(owner, repo, repos_path)
@@ -58,9 +61,19 @@ def main(repo_csv, jsons_path, repos_path, save_path):
                 'precision': precision,
                 'recall': recall
             }
-    save_path.parent.mkdir(exist_ok=True, parents=True)
-    dump_json(results, save_path)
+    save_dir.mkdir(exist_ok=True, parents=True)
+    dump_json(results, save_path/f'{jsons_dir.stem}.json')
 
-
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--repos_file', type=Path)
+    parser.add_argument('--json_dir', type=Path)
+    parser.add_argument('--repos_path', type=Path)
+    parser.add_argument('--results_dir', type=Path)
+    return parser.parse_args()
 if __name__ == '__main__':
-    main('repos.csv', '../2021_04_06_20_13_23/', '../repos/', '../results/2021_04_06_20_13_23.json')
+    args = parse_args()
+    main(args.repos_file, 
+         args.json_dir,
+         args.repos_path,
+         args.results_dir)
