@@ -4,6 +4,8 @@ from astroid.nodes import (
     Assign, AssignAttr, Call, Name, Expr,
     Attribute, Arguments, Return, Tuple
 )
+from astroid.exceptions import AstroidSyntaxError, InconsistentMroError
+
 
 def parse_text(text: str):
     #Validation steps
@@ -73,6 +75,14 @@ def test_recurse_on_tree(filepath='sample_code.py'):
         root = parse_text(text)
         names = recurse_on_tree(root)[1:]
     print(names)
+
+def parse_names_from_text(text):
+    try:
+        tree = parse_text(text)
+        names = recurse_on_tree(tree)
+    except (AstroidSyntaxError, InconsistentMroError) as e:
+        names = []
+    return names
 
 if __name__ == '__main__':
     test_recurse_on_tree()

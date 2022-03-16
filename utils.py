@@ -5,10 +5,12 @@ import uuid
 import pprint
 import pickle
 import requests
+from logger import logger
 from requests.exceptions import ConnectTimeout
 
 
 BASE_URL = 'https://api.github.com/'
+
 
 
 def read_json(filename):
@@ -75,13 +77,31 @@ class RateLimiter:
         return time.time() - self.start
 
 
+def log_wrapper(func):
+    def new_func(*args, **kwargs):
+        logger.debug(f'Function {func.__name__} was called with args {args} and {kwargs}')
+        return func(*args, **kwargs)
+    return new_func
+
+@log_wrapper
+def get_text_from_file(filename):
+    with open(filename, 'r', encoding='utf-8') as f:
+        try:
+            text = f.read()
+        except Exception as e:
+            logger.debug(f'Filename {filename} threw exception {e}')
+            raise
+    return text
+
+@log_wrapper
 def call_endpoint(url, headers={'Accept': 'application/vnd.github.v3+json'}, params={}):
     try:
         response = requests.get(url, params=params, auth = ('username', config["authorization_code"]), headers=headers, timeout=5)
     except ConnectTimeout:
+        logger.warning(f'Connection Timeout for the call {url}')
         return None
+    logger.debug(f'Response status{response.status_code} for the url {url}')
     return response.json()
-
 
 def get_issues_in_repo(owner, repo, labels=None, page=1):
     url = BASE_URL + f'repos/{owner}/{repo}/issues'
@@ -122,12 +142,17 @@ def extract_code_from_body(body: str):
     multiline_code = multiline_pattern.findall(body)
     singleline_pattern = re.compile('`([^`\n]+)`')
     singleline_code = singleline_pattern.findall(body)
+    singleline_code = [('', text) for text in singleline_code]
     return multiline_code + singleline_code
 
 
 def get_modified_files(owner, repo, pr):
     url = BASE_URL + f'repos/{owner}/{repo}/pulls/{pr}/files'
     response_json = call_endpoint(url)
+    # Using pr call to check if issue is actual issue or pr
+    # Alternate way could be to maintain list of prs
+    if 'message' in response_json and response_json['message'] == 'Not Found':
+        return []
     changed_files = []
     for changed_file in response_json:
         changed_files.append({
@@ -136,11 +161,36 @@ def get_modified_files(owner, repo, pr):
         })
     return changed_files
 
-
-def get_mentioned_pr(owner, repo, issue):
+@log_wrapper
+def get_mentioned_pr(owner, repo, issue, page=1):
     url = BASE_URL + f'repos/{owner}/{repo}/issues/{issue}/timeline'
-    response_json = call_endpoint(url)
-    print(response_json)
+    headers = {'Accept' : 'application/vnd.github.mockingbird-preview+json'}
+    params = {
+        'page': page,
+        'per_page': 100,
+    }
+    response_json = call_endpoint(url, params=params, headers = headers)
+    # pprint.pprint(response_json)
+    possible_prs = []
+    if isinstance(response_json, list):
+        for event in response_json:
+            if event['event'] == 'cross-referenced':
+                possible_prs.append(event['source']['issue']['number'])
+    return possible_prs
+
+@log_wrapper
+def get_all_mentioned_prs(owner, repo, issue):
+    possible_prs = []
+    i = 1
+    while(True):
+        prs = get_mentioned_pr(owner, repo, issue, page=i)
+        if len(prs) > 0:
+            logger.debug(f'Got {len(prs)} PRs with page {i} {prs}')
+            possible_prs.extend(prs)
+            i += 1
+        else:
+            break
+    return possible_prs
 
 def get_commits_in_repo(owner, repo, page=1):
     url = BASE_URL + f'repos/{owner}/{repo}/commits'
@@ -157,6 +207,11 @@ def get_commits_in_repo(owner, repo, page=1):
             })
     return commits
 
+def get_languages_in_repo(owner, repo):
+    url = f'/repos/{owner}/{repo}/languages'
+    response = call_endpoint(url)
+    return response
+
 def get_all_commits_in_repo(owner, repo, labels=None):
     all_commits = []
     i = 1
@@ -169,9 +224,32 @@ def get_all_commits_in_repo(owner, repo, labels=None):
             break
     return all_commits
 
+def get_all_issues_in_repo(owner, repo, labels=None):
+    all_issues = []
+    i = 1
+    while(True):
+        issues = get_issues_in_repo(owner, repo, labels=labels, page=i)
+        if len(issues) > 0:
+            all_issues.extend(issues)
+            i += 1
+        else:
+            break
+    return all_issues
+
+def get_all_modified_files(owner, repo, issues):
+    modified_files = {}
+    for issue in issues:
+        issue_id = issue['issue']
+        possible_prs = get_all_mentioned_prs(owner, repo, issue_id)
+        modified_files[issue_id] = []
+        for pr in possible_prs:
+            files = get_modified_files(owner, repo, pr)
+            modified_files[issue_id].extend(files)
+    return modified_files
+
 def test_on_test_issues_repo():
     list_of_keys = ['updated_at', 'state', 'issue', 'labels', 'body', 'body_code', 'title']
-    issues = get_all_issues_in_repo('gan3sh500', 'test-issues-repo', labels=['bug'])
+    issues = get_all_issues_in_repo('gan3sh500', 'test-issues-repo', labels=['Bug'])
     if not isinstance(issues, list):
         raise ValueError('The response is not a list')
     for index, issue in enumerate(issues):
@@ -195,19 +273,28 @@ def test_on_test_issues_repo_commits():
                 raise ValueError(f'The key {key} is missing in issue {index}')
     pprint.pprint(commits, indent=4)
     
-def get_all_issues_in_repo(owner, repo, labels=None):
-    all_issues = []
-    i = 1
-    while(True):
-        issues = get_issues_in_repo(owner, repo, labels=labels, page=i)
-        if len(issues) > 0:
-            all_issues.extend(issues)
-            i += 1
-        else:
-            break
-    return all_issues
 
+
+def test_issue_events_on_pytorchlightning_repo():
+    owner = 'PytorchLightning'
+    repo = 'pytorch-lightning'
+    issue_id = 5649
+    possible_prs = get_all_mentioned_prs(owner, repo, issue_id)
+    # possible_prs = get_mentioned_pr(owner, repo, issue_id, page=100)
+    files = {}
+    for pr in possible_prs:
+        files[pr] = get_modified_files(owner, repo, pr)
+    pprint.pprint(files)
+
+def test_get_modified_file_on_issue():
+    owner = 'automl'
+    repo = 'auto-sklearn'
+    issue_id = 630
+    result = get_modified_files(owner, repo, issue_id)
+    pprint.pprint(result)
 
 if __name__ == '__main__':
-    test_on_test_issues_repo()
+    # test_on_test_issues_repo()
     # test_on_test_issues_repo_commits()
+    test_issue_events_on_pytorchlightning_repo()
+    # test_get_modified_file_on_issue()
